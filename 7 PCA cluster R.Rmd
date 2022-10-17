@@ -1,0 +1,348 @@
+---
+title: "PCA_cluster"
+author: "agustin_ianchina"
+date: '2022-03-02'
+output:
+  pdf_document: default
+always_allow_html: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#install.packages("readxl")
+#install.packages("knitr")
+#install.packages("pastecs")
+#install.packages("lattice")
+#install.packages("ggplot2")
+#install.packages("corrplot")
+#install.packages("factoextra")
+#install.packages("FactoMineR")
+```
+
+```{r}
+#install.packages("cluster")
+#install.packages("heatmaply")
+#install.packages("NbClust")
+```
+
+
+```{r}
+library(readxl)
+library(knitr)
+library(pastecs)
+library(lattice)
+library(ggplot2)
+library(corrplot)
+library(factoextra)
+library(FactoMineR)
+
+library(cluster)
+library(heatmaply)
+library(NbClust)
+```
+
+```{r}
+datos=as.data.frame(read_excel('Provincias.xlsx'))
+```
+## Análisis Descriptivo
+```{r}
+tabla<-stat.desc(datos,basic=FALSE)
+knitr::kable(tabla, digits = 2,caption = "Estadisticos Descriptivos")
+```
+## Matriz de correlación
+```{r}
+r<-cor(datos[-1])
+knitr::kable(r, digits = 2, caption = 'Correlaciones')
+```
+
+```{r}
+corrplot(r, type = 'upper')#, col = brewer.pal(n=8, name='RdYlBu'))
+```
+Las variables más correlacionadas negativamente son: Mortalidad y tasa de actividad con un índice de -0.73; y tasaparo con IPC con un índice de -0.58.
+```{r}
+xyplot(Poblacion~VS, groups = Prov , data = datos)
+```
+```{r}
+xyplot(Poblacion~Industria, groups = Prov , data = datos)
+```
+```{r}
+xyplot(IPC~TasaParo, groups = Prov , data = datos)
+
+```
+## Creación de dataset para aplicar PCA
+```{r creación de dat2}
+datos<-as.data.frame(datos)
+dat2 = datos[,-1]
+rownames(datos) <- datos[,1]
+```
+
+### PCA con 7 componentes
+```{r}
+fit<-PCA(dat2,scale.unit=TRUE,ncp=7,graph=TRUE)
+head(fit)
+```
+
+```{r}
+knitr::kable(fit$eig, digits = 2,caption = 'Autovalores')
+```
+Cuatro componentes explican más del 90% de la variablidad de los datos
+
+### PCA de 4 componentes
+```{r}
+fit<-PCA(dat2,scale.unit=TRUE,ncp=4,graph=TRUE)
+head(fit)
+```
+
+```{r}
+knitr::kable(fit$eig, digits = 2,caption = 'Autovalores')
+```
+
+```{r}
+knitr::kable(fit$svd$V,digits=3,caption="Autovevtores")
+```
+
+La expresión para la primera componente es es producto escalar entre cada una de las variables(estandarizadas) y el vector(representado en la columna).
+CP1=0.294X1-0.106X2+0.041X3+0.110X4+0.294X5+0.286X6+0.293X7+0.293X8+0.282X9+0.292X10+0.291X11+0.114X12-0.114X13+0.294X14+0.291X15+0.018X16+0.292X17+0.172X18
+
+```{r}
+fviz_eig(fit,geom='line',addlabels = TRUE)+theme_grey()
+```
+```{r}
+var<-get_pca_var(fit)
+knitr::kable(var$cor,digits = 3,caption = 'Correlaciones de la CP con las variables')
+```
+
+```{r}
+fviz_pca_var(fit, col.var="cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+fviz_pca_var(fit, axes=c(1,3),col.var="cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+fviz_pca_var(fit, axes=c(1,4),col.var="cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+fviz_pca_var(fit, axes=c(2,3),col.var="cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+fviz_pca_var(fit, axes=c(2,4),col.var="cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+fviz_pca_var(fit, axes=c(3,4),col.var="cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+```
+
+```{r}
+corrplot(var$cos2,is.corr=FALSE)
+```
+##### Las variables peor explicadas son aquellas que tiene baja correlación con con las componentes. Arriba se ve que VS, IPC, TasaActividad tienen bajos niveles de correlación con las componentes.
+##### Las variables mejor explicadas, son aquellas que tienen mayor correlación con las componentes. Sean: Población, NumEmpresas, Industria, Construcción, CTH, Infor, AFS, APT,Ocupados, PIB, TVF.
+```{r}
+fviz_cos2(fit,choice='var',axes=1:4)
+```
+
+```{r}
+knitr::kable(var$contrib,digits=2,caption='Contribuciones de las variables')
+```
+
+```{r}
+corrplot(var$contrib,is.corr=FALSE)
+```
+##### Mortalidad, Natalidad y TasaParo son las que más contribuyen a dim2.
+##### CANE es la que más contribuye a Dim3.
+##### VS, TasaActividad, e IPC son las que más contribuyen a Dim4.
+##### Dim1 tiene una contribución baja de muchas variables.
+```{r}
+ind<-get_pca_ind(fit)
+knitr::kable(ind$coord,digits=3,caption='Valores de los individuos en las CP')
+```
+
+```{r}
+ind$coord
+```
+
+
+```{r}
+fviz_pca_ind(fit,axes=c(1,2),repel=TRUE)
+fviz_pca_ind(fit,axes=c(1,3),repel=TRUE)
+fviz_pca_ind(fit,axes=c(1,4),repel=TRUE)
+fviz_pca_ind(fit,axes=c(2,3),repel=TRUE)
+fviz_pca_ind(fit,axes=c(2,4),repel=TRUE)
+fviz_pca_ind(fit,axes=c(3,4),repel=TRUE)
+```
+```{r}
+fviz_pca_biplot(fit,axes=c(1,2),repel=TRUE,col.var='#2E9FDF',col.ind='#696969')
+fviz_pca_biplot(fit,axes=c(1,3),repel=TRUE,col.var='#2E9FDF',col.ind='#696969')
+fviz_pca_biplot(fit,axes=c(1,4),repel=TRUE,col.var='#2E9FDF',col.ind='#696969')
+fviz_pca_biplot(fit,axes=c(2,3),repel=TRUE,col.var='#2E9FDF',col.ind='#696969')
+fviz_pca_biplot(fit,axes=c(2,4),repel=TRUE,col.var='#2E9FDF',col.ind='#696969')
+fviz_pca_biplot(fit,axes=c(3,4),repel=TRUE,col.var='#2E9FDF',col.ind='#696969')
+```
+##### Por ejemplo, 8 y 30 en dimensión1 son destacadas. Si vemos aquellas variables con las que está correlacionada la dim1, nos resulta fácil entender la correlación ya que son Barcelona y Madrid.(Dos ciudades grandes y muy desarrolladas en relación al resto de las ciudades)
+
+##### Por ejemplo, 50(Zamora), tiene mortalidad alta en relación al resto. Esto también se ve en el vector Mortalidad, y el valor extremos sobre el eje Dim2.
+
+##### Por ejemplo, 26(Jaen), tiene alto dim3, que se correlaciona principalmente con CANE. Esto se comprueba también ya que el valor de CANE para esta provincia es relativamente alto vs el resto.
+
+##### Cada una de las componentes principales puede considerarse “un índice” macroeconómico. El índice sería la combinación lineal (producto escalar mencionado previamente) de cada uno de los vectores de las componentes y las variables medidas.Por ejemplo, dim1 para Madrid es 16.8. Este valor se toma de ind$coord(ver más arriba). 
+
+
+## HeatMaps
+```{r}
+heatmaply(datos,seriate='mean',row_dend_left = TRUE,plot_method = 'plotly')
+```
+
+```{r}
+d<-dist(datos,method = 'euclidean')
+d6<-as.matrix(d)[1:4,1:4]
+knitr::kable(d6,digits = 2,caption = 'Distancias')
+```
+
+```{r}
+fviz_dist(d,show_labels = TRUE)
+ggheatmap(as.matrix(d),seriate='mean')
+heatmaply(as.matrix(d),seriate='OLO',row_dend_left = TRUE,plot_method = 'plotly')
+```
+
+```{r escalado}
+datos_scale<-scale(dat2)
+dist_scale<-dist(datos_scale,method = 'euclidean')
+dist_scale6<-as.matrix(dist_scale)[1:4,1:4]
+knitr::kable(dist_scale6,digits=2,caption = 'Distancias estandarizadas')
+```
+
+```{r}
+fviz_dist(dist_scale,show_labels = TRUE)
+ggheatmap(as.matrix(dist_scale),seriate='mean')
+heatmaply(as.matrix(dist_scale),seriate='OLO',row_dend_left = TRUE,plot_method = 'plotly')
+```
+## Análisis Jerárquico
+```{r}
+res.hc_st<-hclust(dist_scale,method = 'ward.D2')
+fviz_dend(res.hc_st,cex=0.5)
+```
+##### Recomendación: 5 clusters
+```{r}
+grp<-cutree(res.hc_st,k=5)
+knitr::kable(table(grp),caption='Numero de individuos por cluster')
+```
+
+```{r}
+fviz_dend(res.hc_st,k=5,cex=0.5,k_kolors=c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),color_labels_by_k=TRUE,rect=TRUE)
+```
+## Representaciones
+Se realizan algunas representaciones
+```{r}
+fviz_cluster(list(data = dist_scale, cluster = grp),
+palette = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07","#FC5E07","#000000"), ellipse.type = "convex", # Concentration ellipse
+repel = TRUE, # Avoid label overplotting (slow)
+show.clust.cent = FALSE, ggtheme = theme_minimal())
+
+fviz_cluster(list(data = dist_scale, cluster = grp),axes=c(1,3),
+palette = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07","#FC5E07","#000000"), ellipse.type = "convex", # Concentration ellipse
+repel = TRUE, # Avoid label overplotting (slow)
+show.clust.cent = FALSE, ggtheme = theme_minimal())
+
+fviz_cluster(list(data = dist_scale, cluster = grp),axes=c(12,13),
+palette = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07","#FC5E07","#000000"), ellipse.type = "convex", # Concentration ellipse
+repel = TRUE, # Avoid label overplotting (slow)
+show.clust.cent = FALSE, ggtheme = theme_minimal())
+```
+
+```{r}
+RNGkind(sample.kind='Rejection')
+set.seed(1234)
+km.res<-kmeans(datos_scale,5)
+fviz_cluster(km.res,datos_scale)
+```
+
+
+```{r}
+fviz_nbclust(datos_scale,kmeans,method='wss',print.summary=FALSE)+geom_vline(xintercept=3,linetype=2)+labs(subtitle='ElbowMethod')
+```
+##### Elbow recomienda 3 clusters.
+```{r}
+fviz_nbclust(datos_scale,kmeans,method='silhouette')+labs(subtitle='SilhouetteMethod')
+```
+##### Silhouette recomienda 2 clusters.
+
+## Comprobación de la agrupación con 5 clusters.
+```{r}
+sil<-silhouette(km.res$cluster,dist(datos_scale))
+rownames(sil)<-rownames(datos)
+head(sil[,1:3])
+```
+
+```{r}
+fviz_silhouette(sil)
+```
+## Agrupación con 2 clusters.
+```{r}
+RNGkind(sample.kind = 'Rejection')
+set.seed(1234)
+km.res2=kmeans(datos_scale,2)
+fviz_cluster(km.res2,datos_scale)
+fviz_cluster(km.res2,datos_scale,choose.vars=c('Industria','PIB'))
+```
+
+
+```{r}
+sil<-silhouette(km.res2$cluster,dist(datos_scale))
+rownames(sil)=rownames(datos)
+fviz_silhouette(sil)
+```
+##### Si bien todos los valores son positivos, intuitivamente se ve que solo estamos haciendo dos grupos, y uno de ellos tiene únicamente dos miembros. Esto a priori no se ve muy “provechoso”. Parece que vale la pena indagar un poco más.
+
+## Agrupación con 3 clusters.
+```{r}
+RNGkind(sample.kind = 'Rejection')
+set.seed(1234)
+km.res3=kmeans(datos_scale,3)
+fviz_cluster(km.res3,datos_scale)
+fviz_cluster(km.res3,datos_scale,choose.vars=c('Industria','PIB'))
+```
+
+```{r}
+sil<-silhouette(km.res3$cluster,dist(datos_scale))
+rownames(sil)=rownames(datos)
+fviz_silhouette(sil)
+```
+##### Se ven varios valores con valores negativos. Decidimos quedarnos con 5 clusters para analizar luego los boxplots.
+```{r}
+knitr::kable(km.res$centers,digits=2,caption='Estadísticos de los clústers, datos std')
+```
+
+```{r}
+est_clus=aggregate(dat2,by=list(km.res$cluster),mean)
+knitr::kable(est_clus,digits=2,caption='Estadísticos de los clústers')
+```
+
+```{r}
+datos_cluster <- cbind(datos,km.res$cluster)
+lista <- datos_cluster[order(datos_cluster$`km.res$cluster`),c(1,20)]
+names(lista)[names(lista) == "km.res$cluster"] <- 'cluster'
+names(datos_cluster)[names(datos_cluster) == "km.res$cluster"] <- 'cluster'
+datos_cluster$cluster <- as.factor(datos_cluster$cluster)
+knitr::kable(lista,digits=2,caption="Provincias y Clúster")
+```
+
+```{r}
+g1 <- ggplot(datos_cluster,aes(x=cluster,y=Poblacion,fill=cluster))+geom_boxplot()
+g2 <- ggplot(datos_cluster,aes(x=cluster,y=Mortalidad,fill=cluster))+geom_boxplot()
+g3 <- ggplot(datos_cluster,aes(x=cluster,y=Natalidad,fill=cluster))+geom_boxplot()
+g4 <- ggplot(datos_cluster,aes(x=cluster,y=IPC,fill=cluster))+geom_boxplot()
+g5 <- ggplot(datos_cluster,aes(x=cluster,y=NumEmpresas,fill=cluster))+geom_boxplot()
+g6 <- ggplot(datos_cluster,aes(x=cluster,y=Industria,fill=cluster))+geom_boxplot()
+g7 <- ggplot(datos_cluster,aes(x=cluster,y=Construccion,fill=cluster))+geom_boxplot()
+g8 <- ggplot(datos_cluster,aes(x=cluster,y=CTH,fill=cluster))+geom_boxplot()
+g9 <- ggplot(datos_cluster,aes(x=cluster,y=Infor,fill=cluster))+geom_boxplot()
+g10 <- ggplot(datos_cluster,aes(x=cluster,y=AFS,fill=cluster))+geom_boxplot()
+g11 <- ggplot(datos_cluster,aes(x=cluster,y=APT,fill=cluster))+geom_boxplot()
+g12 <- ggplot(datos_cluster,aes(x=cluster,y=TasaActividad,fill=cluster))+geom_boxplot()
+g13 <- ggplot(datos_cluster,aes(x=cluster,y=TasaParo,fill=cluster))+geom_boxplot()
+g14 <- ggplot(datos_cluster,aes(x=cluster,y=Ocupados,fill=cluster))+geom_boxplot()
+g15 <- ggplot(datos_cluster,aes(x=cluster,y=PIB,fill=cluster))+geom_boxplot()
+g16 <- ggplot(datos_cluster,aes(x=cluster,y=CANE,fill=cluster))+geom_boxplot()
+g17 <- ggplot(datos_cluster,aes(x=cluster,y=TVF,fill=cluster))+geom_boxplot()
+g18 <- ggplot(datos_cluster,aes(x=cluster,y=VS,fill=cluster))+geom_boxplot()
+
+gridExtra::grid.arrange(g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12,g13,g14,g15,g16,g17,g18,ncol=3,nrow=6)
+
+```
+
+##### Observando los boxplots hace sentido la agrupación en sólo dos clusters ya que no se ven “grandes” diferencias entre varios de ellos. Sin embargo podemos decir que: el cluster 4 es relativamente más “desarrollado” que el resto; el cluster 5 tiene alta mortalidad; el cluster 1 tiene valores bajos de “desarrollo” en general; el cluster 3 se destaca por valores altos de CANE y VS; el cluster 2 tiene en general valores bajos de “desarrollo” a la vez que tiene alta tasa de paro y valor bajo de IPC.
+

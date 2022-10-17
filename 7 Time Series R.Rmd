@@ -1,0 +1,170 @@
+---
+title: "time_series"
+author: "agustin_ianchina"
+date: '2022-03-06'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+#install.packages("forecast")
+#install.packages("zoo")
+```
+
+```{r}
+library(forecast)
+library(knitr)
+library(lattice)
+library(ggplot2)
+library(stringr)
+library(zoo)
+```
+
+
+## EJERCICIO DE EVALUACIÓN II
+Se trabaja sobre la serio gold. La misma incluye los precios históricos del oro desde el año 2016 por día.
+
+#### Representaciones y coeficientes de estacionalidad
+```{r}
+gold <- read.csv("Gold_Futures_Historical_Data.csv")
+gold$Price <- as.numeric(str_replace_all(gold$Price,",",""))
+price <- ts(gold[,2],start=c(2016,3),frequency = 52)
+autoplot(price)+ggtitle("PrecioGold")+xlab("year")+ylab("usd")
+```
+```{r}
+price_comp <- decompose(price,type=c("multiplicative"))
+autoplot(price_comp,ts.colour="purple")
+ggseasonplot(price,year.labels=TRUE,year.labels.left=TRUE)+ylab("usd")
+autoplot(price,series="datos")+
+  autolayer(trendcycle(price_comp),series = "Tendencia")+
+  autolayer(seasadj(price_comp),series = "Estacionalmente ajustada")+
+  xlab("year")+ylab("usd")+
+  scale_color_manual(values = c("black","blue","green"),breaks = c("Datos","Esatacionalmete ajustada","Tendencia"))
+?scale_color_manual
+```
+```{r}
+knitr::kable(price_comp$figure,digits = 2,caption = "coef.estacionalidad")
+```
+Tal como se ve, la estacionalidad es realmente muy baja.
+
+
+
+
+```{r}
+last_period <- window(price,start=c(2021,1))#Se reserva el último año para compara las predicciones
+price_to_fit <- window(price,start=c(2016,1),end=c(2020,52))#Se toma todos los valores sin los reservados para ajustar las series.
+```
+
+## Alisado simple
+
+```{r}
+precio_s1=ses(price_to_fit,alpha=NULL,h=55)
+knitr::kable(precio_s1$model$par,digits = 4,caption = "Parametros del modelo")
+autoplot(precio_s1)+autolayer(fitted(precio_s1),series="Fitted")+ylab("usd")+xlab("year")
+precio_s1
+```
+## Alisado doble
+Aumimos cierta pendiente, que varía lentamente.
+
+```{r}
+precio_sh <- holt(price_to_fit,h=55)
+autoplot(precio_sh)+
+  autolayer(fitted(precio_sh),series="Fitted")+ylab("precio")+xlab("dia")
+precio_sh[["model"]]
+precio_sh
+```
+## Alisado amortiguado
+```{r}
+precio_shd <- holt(price_to_fit,damped=TRUE,phi=0.9,h=55)
+knitr::kable(precio_shd$model$par,digits=4,caption="Parametros damped holt")
+autoplot(price_to_fit)+
+  autolayer(precio_sh,series="Holt",PI=FALSE)+
+  autolayer(precio_shd,series="Damped Holt",PI=FALSE)+
+  ggtitle("Forecasts from Holt's Method")+
+  xlab("year")+ylab("precio")+guides(colour=guide_legend(title="Forecast"))
+precio_shd
+```
+## Suavizado Holt Winters
+Este método no lo logré aplicar, ya que tengo que cambiar la frecuencia, y los resultados se distorsionan.
+```{r}
+pricefreq <- ts(gold[,2],start=c(2021,45),frequency = 24)#se cambia la frecuencia para sortear el error "frequency too high"
+last_period_freq <- window(pricefreq,start=c(2016,1))
+fit_hw <- hw(last_period_freq,h=5,seasonal="multiplicative",level=c(80,95))
+autoplot(fit_hw)
+knitr::kable(fit_hw$model$par,format="pipe",digits=4,caption="Estimadores de los parametros")
+fit_hw
+```
+## Ajustes ARIMA
+### Correlogramas
+```{r}
+ggAcf(price)
+ggPacf(price)
+```
+De aquí se ve AR(1).
+Además se ve que no hay estacionalidad.
+
+```{r}
+autoplot(diff(price))+ggtitle("PrecioGold d=1")+xlab("year")+ylab("usd")
+autoplot(diff(diff(price)))+ggtitle("PrecioGold d=2")+xlab("year")+ylab("usd")
+```
+De aquí se ve I(1)
+
+
+### Correlogramas de la diferencia.
+```{r}
+ggAcf(diff(price))
+ggPacf(diff(price))
+```
+### Ajuste manual
+```{r}
+fit_ari <- Arima(price_to_fit,c(1,1,0))
+checkresiduals(fit_ari)
+```
+El p-valor no nos deja rechazar la hipótesis nula, por ende los residuales están incorrelados.
+```{r}
+print(fit_ari)
+```
+
+#### Fórmula del modelo ajustado
+(1 + 0.1464B)(1 - B)Xt = Zt
+(1 + 0.146B)(Xt - Xt-1) = Zt
+Xt - Xt-1 + 0.146Xt-1 - 0.146Xt-2 = Zt
+Xt = Xt-1 - 0.146Xt-1 + 0.146Xt-2 + Zt
+
+```{r}
+autoplot(forecast(fit_ari,h=55))
+knitr::kable(forecast(fit_ari,h=55,digits=4,caption="Predicciones"))
+```
+
+### Ajuste automático
+```{r}
+fit_autoarima <- auto.arima(price_to_fit)
+checkresiduals(fit_autoarima)
+```
+El p-valor no nos deja rechazar la hipótesis nula, por ende los residuales están incorrelados.
+```{r}
+print(fit_autoarima)
+```
+
+```{r}
+autoplot(forecast(fit_autoarima,h=55))
+knitr::kable(forecast(fit_autoarima,h=55,digits=4,caption="Predicciones"))
+```
+Llama la atención que el ajuste automático considera estacionalidad. De todas maneras, al comparar el AIC se ve que la diferencia no es significativa.
+
+
+## Comparación de las predicciones
+```{r}
+autoplot(price) + 
+  autolayer(forecast(fit_ari,h=55),series="manual",PI=FALSE) + 
+  autolayer(forecast(fit_autoarima,h=55),series="auto",PI=FALSE) + 
+  autolayer(forecast(precio_sh,h=55),series="alisado doble",PI=FALSE) +
+  ggtitle("Predicciones para los diferentes modelos") +
+  xlab("year")+ylab("usd")+
+  guides(colour=guide_legend(title="Forecast"))
+  
+```
+## Conclusiones:
+Es muy interesante ver que el alisado doble, y el ajuste autorima predicen la tendencia decreciente hacia el ppio del 2022.
+Sin embargo, el modelado manual logra predecir mejor la tendencia, pero sin ver el gran salto que se produce al ppio del 2022. Por supuesto que el modelado manual no capta nada del “ruido” y la volatilidad del período.
